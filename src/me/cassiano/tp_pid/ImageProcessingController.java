@@ -10,10 +10,12 @@ import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
+import javafx.scene.control.Button;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.stage.FileChooser;
 import org.opencv.core.*;
@@ -39,9 +41,18 @@ public class ImageProcessingController {
     @FXML
     private Slider zoomSlider;
 
+    @FXML
+    private Button inSeed;
+
+    @FXML
+    private Button outSeed;
+
+
     private DoubleProperty sliderZoomProperty = new SimpleDoubleProperty(100);
 
     private Image histo;
+
+    private boolean pickingSeed = false;
 
 
 
@@ -67,9 +78,67 @@ public class ImageProcessingController {
             currentImage.setImage(image);
 
             showHistogram(currentMat, true);
+
+            inSeed.setDisable(false);
+            outSeed.setDisable(false);
         }
 
     }
+
+    private void registerImageViewOnClickListener() {
+
+        currentImage.setOnMouseClicked(new EventHandler<MouseEvent>() {
+            @Override
+            public void handle(MouseEvent event) {
+                System.out.println("X: " + event.getX());
+                System.out.println("Y: " + event.getY());
+
+
+                currentImage.setOnMouseClicked(null);
+                enableSeedButtons();
+            }
+        });
+
+    }
+
+    private void disableSeedButtons() {
+        pickingSeed = true;
+
+        zoomSlider.setDisable(true);
+        inSeed.setDisable(true);
+        outSeed.setDisable(true);
+    }
+
+    private void enableSeedButtons() {
+        pickingSeed = false;
+
+        zoomSlider.setDisable(false);
+        inSeed.setDisable(false);
+        outSeed.setDisable(false);
+    }
+
+    private void zoomToActualSize() {
+
+        sliderZoomProperty.set(100);
+        zoomSlider.setValue(100);
+
+    }
+
+    public void inSeedClicked(ActionEvent actionEvent) {
+
+        zoomToActualSize();
+        disableSeedButtons();
+        registerImageViewOnClickListener();
+
+    }
+
+    public void outSeedClicked(ActionEvent actionEvent) {
+
+        zoomToActualSize();
+        disableSeedButtons();
+        registerImageViewOnClickListener();
+    }
+
 
     private void registerSliderListener() {
 
@@ -87,10 +156,13 @@ public class ImageProcessingController {
             @Override
             public void invalidated(Observable observable) {
 
+                if (pickingSeed)
+                    return;
+
                 Double width = currentImage.getImage().getWidth();
                 Double height = currentImage.getImage().getHeight();
 
-                currentImage.setFitWidth(width * sliderZoomProperty.get()/100.0);
+                currentImage.setFitWidth(width * sliderZoomProperty.get() / 100.0);
                 currentImage.setFitHeight(height * sliderZoomProperty.get() / 100.0);
 
 
@@ -105,23 +177,24 @@ public class ImageProcessingController {
             @Override
             public void handle(ScrollEvent event) {
 
+                if (pickingSeed)
+                    return;
+
                 Double  blockIncrement = zoomSlider.getBlockIncrement();
 
                 if (event.getDeltaY() > 0 &&
                         zoomSlider.getValue() + blockIncrement <= zoomSlider.getMax()) {
 
-                        sliderZoomProperty.set(sliderZoomProperty.get() + blockIncrement);
-                        zoomSlider.setValue(zoomSlider.getValue() + blockIncrement);
+                    sliderZoomProperty.set(sliderZoomProperty.get() + blockIncrement);
+                    zoomSlider.setValue(zoomSlider.getValue() + blockIncrement);
                 }
 
-                else if (event.getDeltaY() < 0
-                        && zoomSlider.getValue() - blockIncrement >= zoomSlider.getMin()) {
+                else if (event.getDeltaY() < 0 &&
+                        zoomSlider.getValue() - blockIncrement >= zoomSlider.getMin()) {
 
                     sliderZoomProperty.set(sliderZoomProperty.get() - blockIncrement);
                     zoomSlider.setValue(zoomSlider.getValue() - blockIncrement);
                 }
-
-
 
             }
         });

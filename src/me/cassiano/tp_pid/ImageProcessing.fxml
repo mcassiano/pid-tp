@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.*?>
+<?import javafx.geometry.*?>
+<?import java.lang.*?>
+<?import javafx.scene.image.*?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
+
 <VBox prefHeight="400.0" prefWidth="640.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="me.cassiano.tp_pid.ImageProcessingController">
   <children>
     <MenuBar VBox.vgrow="NEVER">
@@ -31,6 +36,16 @@
                <children>
                   <Label text="Histograma" />
                   <ImageView fx:id="histogram" fitWidth="215.0" pickOnBounds="true" preserveRatio="true" />
+                  <Button fx:id="inSeed" disable="true" mnemonicParsing="false" onAction="#inSeedClicked" text="Selecionar semente interna">
+                     <VBox.margin>
+                        <Insets top="10.0" />
+                     </VBox.margin>
+                  </Button>
+                  <Button fx:id="outSeed" disable="true" mnemonicParsing="false" onAction="#outSeedClicked" text="Selecionar semente externa">
+                     <VBox.margin>
+                        <Insets top="10.0" />
+                     </VBox.margin>
+                  </Button>
                </children>
             </VBox>
          </children>
