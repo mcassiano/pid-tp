@@ -10,13 +10,17 @@ import javafx.beans.value.ObservableValue;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
+import javafx.fxml.Initializable;
+import javafx.scene.Group;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.paint.Paint;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 import org.opencv.core.*;
 import org.opencv.highgui.Highgui;
@@ -24,19 +28,15 @@ import org.opencv.imgproc.Imgproc;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ResourceBundle;
 
-public class ImageProcessingController {
-
-    @FXML
-    private ImageView currentImage;
+public class ImageProcessingController implements Initializable {
 
     @FXML
     private ImageView histogram;
-
-    @FXML
-    private ScrollPane currentImageContainer;
 
     @FXML
     private Slider zoomSlider;
@@ -47,6 +47,15 @@ public class ImageProcessingController {
     @FXML
     private Button outSeed;
 
+    @FXML
+    private Group rootGroup;
+
+    @FXML
+    private Button clearSeedsButton;
+
+    private Group zoomGroup;
+
+    private ImageView currentImage;
 
     private DoubleProperty sliderZoomProperty = new SimpleDoubleProperty(100);
 
@@ -54,6 +63,31 @@ public class ImageProcessingController {
 
     private boolean pickingSeed = false;
 
+    private Circle internalSeed;
+    private Circle externalSeed;
+
+    private Seed seedBeingPicked;
+
+
+    private enum Seed {
+        Internal, External;
+    }
+
+
+
+    @Override
+    public void initialize(URL location, ResourceBundle resources) {
+
+        currentImage = new ImageView();
+
+        currentImage.setId("imageView");
+
+        zoomGroup = new Group();
+        zoomGroup.getChildren().add(currentImage);
+
+        rootGroup.getChildren().add(zoomGroup);
+
+    }
 
 
     public void openImageClicked(ActionEvent actionEvent) {
@@ -79,9 +113,25 @@ public class ImageProcessingController {
 
             showHistogram(currentMat, true);
 
-            inSeed.setDisable(false);
-            outSeed.setDisable(false);
+            enableSeedButtons();
         }
+
+    }
+
+    private void clearPoints() {
+
+        List<Node> nodesToBeRemoved = new ArrayList<Node>();
+
+        for (Node node : zoomGroup.getChildren()) {
+            if (node.getId() == null)
+                nodesToBeRemoved.add(node);
+        }
+
+        zoomGroup.getChildren().removeAll(nodesToBeRemoved);
+
+        internalSeed = null;
+        externalSeed = null;
+
 
     }
 
@@ -93,6 +143,33 @@ public class ImageProcessingController {
                 System.out.println("X: " + event.getX());
                 System.out.println("Y: " + event.getY());
 
+
+                Circle circle = new Circle();
+                circle.setRadius(5);
+                circle.setCenterX(event.getX());
+                circle.setCenterY(event.getY());
+
+                if (seedBeingPicked == Seed.Internal) {
+
+                    circle.setFill(Paint.valueOf("GREEN"));
+
+                    if (internalSeed != null)
+                        zoomGroup.getChildren().remove(internalSeed);
+
+                    internalSeed = circle;
+                }
+
+                else if (seedBeingPicked == Seed.External) {
+
+                    circle.setFill(Paint.valueOf("BLUE"));
+
+                    if (externalSeed != null)
+                        zoomGroup.getChildren().remove(externalSeed);
+
+                    externalSeed = circle;
+                }
+
+                zoomGroup.getChildren().add(circle);
 
                 currentImage.setOnMouseClicked(null);
                 enableSeedButtons();
@@ -107,6 +184,7 @@ public class ImageProcessingController {
         zoomSlider.setDisable(true);
         inSeed.setDisable(true);
         outSeed.setDisable(true);
+        clearSeedsButton.setDisable(true);
     }
 
     private void enableSeedButtons() {
@@ -115,6 +193,8 @@ public class ImageProcessingController {
         zoomSlider.setDisable(false);
         inSeed.setDisable(false);
         outSeed.setDisable(false);
+        clearSeedsButton.setDisable(false);
+
     }
 
     private void zoomToActualSize() {
@@ -126,7 +206,8 @@ public class ImageProcessingController {
 
     public void inSeedClicked(ActionEvent actionEvent) {
 
-        zoomToActualSize();
+        //zoomToActualSize();
+        seedBeingPicked = Seed.Internal;
         disableSeedButtons();
         registerImageViewOnClickListener();
 
@@ -134,7 +215,8 @@ public class ImageProcessingController {
 
     public void outSeedClicked(ActionEvent actionEvent) {
 
-        zoomToActualSize();
+        //zoomToActualSize();
+        seedBeingPicked = Seed.External;
         disableSeedButtons();
         registerImageViewOnClickListener();
     }
@@ -159,11 +241,8 @@ public class ImageProcessingController {
                 if (pickingSeed)
                     return;
 
-                Double width = currentImage.getImage().getWidth();
-                Double height = currentImage.getImage().getHeight();
-
-                currentImage.setFitWidth(width * sliderZoomProperty.get() / 100.0);
-                currentImage.setFitHeight(height * sliderZoomProperty.get() / 100.0);
+                zoomGroup.setScaleX(sliderZoomProperty.get()/100);
+                zoomGroup.setScaleY(sliderZoomProperty.get()/100);
 
 
             }
@@ -173,7 +252,7 @@ public class ImageProcessingController {
 
     private void registerScrollListener() {
 
-        currentImageContainer.addEventFilter(ScrollEvent.ANY, new EventHandler<ScrollEvent>() {
+        zoomGroup.addEventFilter(ScrollEvent.ANY, new EventHandler<ScrollEvent>() {
             @Override
             public void handle(ScrollEvent event) {
 
@@ -280,5 +359,11 @@ public class ImageProcessingController {
         MatOfByte buffer = new MatOfByte();
         Highgui.imencode(".png", frame, buffer);
         return new Image(new ByteArrayInputStream(buffer.toArray()));
+    }
+
+    public void clearSeeds(ActionEvent actionEvent) {
+
+        clearPoints();
+
     }
 }
