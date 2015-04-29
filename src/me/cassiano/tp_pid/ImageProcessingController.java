@@ -1,42 +1,45 @@
 package me.cassiano.tp_pid;
 
-import javafx.application.Platform;
+import com.pixelmed.dicom.DicomException;
+import com.pixelmed.dicom.DicomFileUtilities;
+import com.pixelmed.display.SourceImage;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.Group;
-import javafx.scene.Node;
+import javafx.scene.canvas.Canvas;
 import javafx.scene.control.Button;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
-import javafx.scene.paint.Paint;
-import javafx.scene.shape.Circle;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.LineTo;
+import javafx.scene.shape.MoveTo;
+import javafx.scene.shape.Path;
 import javafx.stage.FileChooser;
-import org.opencv.core.*;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfByte;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.ResourceBundle;
 
 public class ImageProcessingController implements Initializable {
 
-    @FXML
-    private ImageView histogram;
 
     @FXML
     private Slider zoomSlider;
@@ -55,16 +58,18 @@ public class ImageProcessingController implements Initializable {
 
     private Group zoomGroup;
 
-    private ImageView currentImage;
+    private Image currentImage;
+
+    private Canvas canvas;
 
     private DoubleProperty sliderZoomProperty = new SimpleDoubleProperty(100);
 
-    private Image histo;
-
     private boolean pickingSeed = false;
 
-    private Circle internalSeed;
-    private Circle externalSeed;
+    private Group internalSeed;
+    private Group externalSeed;
+
+    private Path tempPath;
 
     private Seed seedBeingPicked;
 
@@ -74,16 +79,10 @@ public class ImageProcessingController implements Initializable {
     }
 
 
-
     @Override
     public void initialize(URL location, ResourceBundle resources) {
 
-        currentImage = new ImageView();
-
-        currentImage.setId("imageView");
-
         zoomGroup = new Group();
-        zoomGroup.getChildren().add(currentImage);
 
         rootGroup.getChildren().add(zoomGroup);
 
@@ -92,26 +91,55 @@ public class ImageProcessingController implements Initializable {
 
     public void openImageClicked(ActionEvent actionEvent) {
 
-        if (currentImage.getImage() == null) {
+        if (currentImage == null) {
             registerScrollListener();
             registerSliderListener();
         }
 
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Selecionar imagem");
-        File file = fileChooser.showOpenDialog(currentImage.getScene().getWindow());
+        File file = fileChooser.showOpenDialog(inSeed.getScene().getWindow());
 
 
         if (file != null) {
 
-            Mat currentMat = Highgui.imread(file.getAbsolutePath());
-            Imgproc.cvtColor(currentMat, currentMat, Imgproc.COLOR_BGR2GRAY);
+            if (DicomFileUtilities.isDicomOrAcrNemaFile(file)) {
 
-            Image image = mat2Image(currentMat);
+                try {
+                    SourceImage si = new SourceImage(file.getAbsolutePath());
+                    BufferedImage bi = si.getBufferedImage();
 
-            currentImage.setImage(image);
+                    currentImage = SwingFXUtils.toFXImage(bi, null);
 
-            showHistogram(currentMat, true);
+                    // Ainda não consegui converter DICOM 16 bits
+                    // para um objeto Mat do OpenCV, então não converto pra
+                    // escala de cinza.
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (DicomException e) {
+                    e.printStackTrace();
+                }
+
+            }
+
+            else {
+
+                Mat mat = Highgui.imread(file.getAbsolutePath());
+                Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY);
+                currentImage = mat2Image(mat);
+
+            }
+
+            if (canvas != null)
+                zoomGroup.getChildren().remove(canvas);
+
+            clearPoints();
+
+            canvas = new Canvas(currentImage.getWidth(), currentImage.getHeight());
+            canvas.getGraphicsContext2D().drawImage(currentImage, 0, 0);
+
+            zoomGroup.getChildren().add(canvas);
 
             enableSeedButtons();
         }
@@ -120,59 +148,84 @@ public class ImageProcessingController implements Initializable {
 
     private void clearPoints() {
 
-        List<Node> nodesToBeRemoved = new ArrayList<Node>();
+        if (internalSeed != null)
+            internalSeed.getChildren().removeAll(internalSeed.getChildren());
 
-        for (Node node : zoomGroup.getChildren()) {
-            if (node.getId() == null)
-                nodesToBeRemoved.add(node);
-        }
-
-        zoomGroup.getChildren().removeAll(nodesToBeRemoved);
-
-        internalSeed = null;
-        externalSeed = null;
+        if (externalSeed != null)
+            externalSeed.getChildren().removeAll(externalSeed.getChildren());
 
 
     }
 
-    private void registerImageViewOnClickListener() {
+    private void registerCanvasForMouseEvents() {
 
-        currentImage.setOnMouseClicked(new EventHandler<MouseEvent>() {
+        canvas.setOnMousePressed(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent event) {
-                System.out.println("X: " + event.getX());
-                System.out.println("Y: " + event.getY());
 
-
-                Circle circle = new Circle();
-                circle.setRadius(5);
-                circle.setCenterX(event.getX());
-                circle.setCenterY(event.getY());
+                Group seed;
+                Color strokeColor;
 
                 if (seedBeingPicked == Seed.Internal) {
 
-                    circle.setFill(Paint.valueOf("GREEN"));
+                    if (internalSeed == null) {
+                        internalSeed = new Group();
+                        zoomGroup.getChildren().add(internalSeed);
+                    }
 
-                    if (internalSeed != null)
-                        zoomGroup.getChildren().remove(internalSeed);
+                    seed = internalSeed;
+                    strokeColor = Color.GREEN;
+                }
+                else {
 
-                    internalSeed = circle;
+                    if (externalSeed == null) {
+                        externalSeed = new Group();
+                        zoomGroup.getChildren().add(externalSeed);
+                    }
+
+                    seed = externalSeed;
+                    strokeColor = Color.BLUE;
                 }
 
-                else if (seedBeingPicked == Seed.External) {
+                seed.getChildren().removeAll(seed.getChildren());
 
-                    circle.setFill(Paint.valueOf("BLUE"));
+                tempPath = new Path();
 
-                    if (externalSeed != null)
-                        zoomGroup.getChildren().remove(externalSeed);
+                tempPath.setMouseTransparent(true);
+                tempPath.setStrokeWidth(3.0);
+                tempPath.setStroke(strokeColor);
 
-                    externalSeed = circle;
+                seed.getChildren().add(tempPath);
+
+                tempPath.getElements().add(
+                        new MoveTo(event.getX(), event.getY()));
+
+            }
+        });
+
+        canvas.setOnMouseDragged(new EventHandler<MouseEvent>() {
+            @Override
+            public void handle(MouseEvent event) {
+                if (canvas.getBoundsInLocal().contains(
+                        event.getX(), event.getY())) {
+
+                    tempPath.getElements().add(
+                            new LineTo(event.getX(), event.getY()));
                 }
+            }
+        });
 
-                zoomGroup.getChildren().add(circle);
+        canvas.setOnMouseReleased(new EventHandler<MouseEvent>() {
+            @Override
+            public void handle(MouseEvent event) {
 
-                currentImage.setOnMouseClicked(null);
+                canvas.setOnMousePressed(null);
+                canvas.setOnMouseDragged(null);
+
+                tempPath = null;
+
                 enableSeedButtons();
+
             }
         });
 
@@ -197,28 +250,20 @@ public class ImageProcessingController implements Initializable {
 
     }
 
-    private void zoomToActualSize() {
-
-        sliderZoomProperty.set(100);
-        zoomSlider.setValue(100);
-
-    }
-
     public void inSeedClicked(ActionEvent actionEvent) {
 
-        //zoomToActualSize();
         seedBeingPicked = Seed.Internal;
+
         disableSeedButtons();
-        registerImageViewOnClickListener();
+        registerCanvasForMouseEvents();
 
     }
 
     public void outSeedClicked(ActionEvent actionEvent) {
 
-        //zoomToActualSize();
         seedBeingPicked = Seed.External;
         disableSeedButtons();
-        registerImageViewOnClickListener();
+        registerCanvasForMouseEvents();
     }
 
 
@@ -280,86 +325,12 @@ public class ImageProcessingController implements Initializable {
 
     }
 
-    private void showHistogram(Mat frame, boolean gray)
-    {
-        // split the frames in multiple images
-        List<Mat> images = new ArrayList<Mat>();
-        Core.split(frame, images);
-
-        // set the number of bins at 256
-        MatOfInt histSize = new MatOfInt(256);
-        // only one channel
-        MatOfInt channels = new MatOfInt(0);
-        // set the ranges
-        MatOfFloat histRange = new MatOfFloat(0, 256);
-
-        // compute the histograms for the B, G and R components
-        Mat hist_b = new Mat();
-        Mat hist_g = new Mat();
-        Mat hist_r = new Mat();
-
-        // B component or gray image
-        Imgproc.calcHist(images.subList(0, 1), channels, new Mat(), hist_b, histSize, histRange, false);
-
-        // G and R components (if the image is not in gray scale)
-        if (!gray)
-        {
-            Imgproc.calcHist(images.subList(1, 2), channels, new Mat(), hist_g, histSize, histRange, false);
-            Imgproc.calcHist(images.subList(2, 3), channels, new Mat(), hist_r, histSize, histRange, false);
-        }
-
-        // draw the histogram
-        int hist_w = 215; // width of the histogram image
-        int hist_h = 215; // height of the histogram image
-        int bin_w = (int) Math.round(hist_w / histSize.get(0, 0)[0]);
-
-        Mat histImage = new Mat(hist_h, hist_w, CvType.CV_8UC3, new Scalar(0, 0, 0));
-        // normalize the result to [0, histImage.rows()]
-        Core.normalize(hist_b, hist_b, 0, histImage.rows(), Core.NORM_MINMAX, -1, new Mat());
-
-        // for G and R components
-        if (!gray)
-        {
-            Core.normalize(hist_g, hist_g, 0, histImage.rows(), Core.NORM_MINMAX, -1, new Mat());
-            Core.normalize(hist_r, hist_r, 0, histImage.rows(), Core.NORM_MINMAX, -1, new Mat());
-        }
-
-        // effectively draw the histogram(s)
-        for (int i = 1; i < histSize.get(0, 0)[0]; i++)
-        {
-            // B component or gray image
-            Core.line(histImage, new Point(bin_w * (i - 1), hist_h - Math.round(hist_b.get(i - 1, 0)[0])), new Point(
-                    bin_w * (i), hist_h - Math.round(hist_b.get(i, 0)[0])), new Scalar(255, 0, 0), 2, 8, 0);
-            // G and R components (if the image is not in gray scale)
-            if (!gray)
-            {
-                Core.line(histImage, new Point(bin_w * (i - 1), hist_h - Math.round(hist_g.get(i - 1, 0)[0])),
-                        new Point(bin_w * (i), hist_h - Math.round(hist_g.get(i, 0)[0])), new Scalar(0, 255, 0), 2, 8,
-                        0);
-                Core.line(histImage, new Point(bin_w * (i - 1), hist_h - Math.round(hist_r.get(i - 1, 0)[0])),
-                        new Point(bin_w * (i), hist_h - Math.round(hist_r.get(i, 0)[0])), new Scalar(0, 0, 255), 2, 8,
-                        0);
-            }
-        }
-
-        histo = mat2Image(histImage);
-
-        // display the whole
-        Platform.runLater(new Runnable() {
-            @Override
-            public void run() {
-                histogram.setImage(histo);
-            }
-        });
-
-    }
-
-    private Image mat2Image(Mat frame)
-    {
+    private Image mat2Image(Mat frame) {
         MatOfByte buffer = new MatOfByte();
         Highgui.imencode(".png", frame, buffer);
         return new Image(new ByteArrayInputStream(buffer.toArray()));
     }
+
 
     public void clearSeeds(ActionEvent actionEvent) {
 
