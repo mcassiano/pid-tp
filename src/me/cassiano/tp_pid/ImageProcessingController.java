@@ -22,9 +22,7 @@ import javafx.scene.image.Image;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
-import javafx.scene.shape.LineTo;
-import javafx.scene.shape.MoveTo;
-import javafx.scene.shape.Path;
+import javafx.scene.shape.*;
 import javafx.stage.FileChooser;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
@@ -56,6 +54,9 @@ public class ImageProcessingController implements Initializable {
     @FXML
     private Button clearSeedsButton;
 
+//    @FXML
+//    private RangeSlider rangeSlider;
+
     private Group zoomGroup;
 
     private Image currentImage;
@@ -66,35 +67,27 @@ public class ImageProcessingController implements Initializable {
 
     private boolean pickingSeed = false;
 
-    private Group internalSeed;
-    private Group externalSeed;
+    private Seed internalSeed;
+    private Seed externalSeed;
 
     private Path tempPath;
+    private Seed.Type seedBeingPicked;
+    private Seed.Shape seedShape;
 
-    private Seed seedBeingPicked;
-
-
-    private enum Seed {
-        Internal, External;
-    }
+    private Shape shape;
 
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
 
+        seedShape = Seed.Shape.Circle;
         zoomGroup = new Group();
-
+        zoomGroup.setMouseTransparent(false);
         rootGroup.getChildren().add(zoomGroup);
 
     }
 
-
     public void openImageClicked(ActionEvent actionEvent) {
-
-        if (currentImage == null) {
-            registerScrollListener();
-            registerSliderListener();
-        }
 
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Selecionar imagem");
@@ -102,6 +95,12 @@ public class ImageProcessingController implements Initializable {
 
 
         if (file != null) {
+
+            if (currentImage == null) {
+                registerScrollListener();
+                registerSliderListener();
+                //registerRangeSliderListener();
+            }
 
             if (DicomFileUtilities.isDicomOrAcrNemaFile(file)) {
 
@@ -148,11 +147,17 @@ public class ImageProcessingController implements Initializable {
 
     private void clearPoints() {
 
-        if (internalSeed != null)
-            internalSeed.getChildren().removeAll(internalSeed.getChildren());
+        if (internalSeed != null) {
+            internalSeed.getView().getChildren().
+                    removeAll(internalSeed.getView().getChildren());
+            internalSeed = null;
+        }
 
-        if (externalSeed != null)
-            externalSeed.getChildren().removeAll(externalSeed.getChildren());
+        if (externalSeed != null) {
+            externalSeed.getView().getChildren().
+                    removeAll(externalSeed.getView().getChildren());
+            externalSeed = null;
+        }
 
 
     }
@@ -163,39 +168,61 @@ public class ImageProcessingController implements Initializable {
             @Override
             public void handle(MouseEvent event) {
 
-                Group seed;
+                Seed seed;
                 Color strokeColor;
 
-                if (seedBeingPicked == Seed.Internal) {
+                if (seedBeingPicked == Seed.Type.Internal) {
 
                     if (internalSeed == null) {
-                        internalSeed = new Group();
-                        zoomGroup.getChildren().add(internalSeed);
+                        internalSeed = new Seed();
+                        internalSeed.setView(new Group());
+                        zoomGroup.getChildren().add(internalSeed.getView());
                     }
 
                     seed = internalSeed;
                     strokeColor = Color.GREEN;
                 }
+
                 else {
 
                     if (externalSeed == null) {
-                        externalSeed = new Group();
-                        zoomGroup.getChildren().add(externalSeed);
+                        externalSeed = new Seed();
+                        externalSeed.setView(new Group());
+                        zoomGroup.getChildren().add(externalSeed.getView());
                     }
 
                     seed = externalSeed;
                     strokeColor = Color.BLUE;
                 }
 
-                seed.getChildren().removeAll(seed.getChildren());
+                seed.getView().getChildren().
+                        removeAll(seed.getView().getChildren());
+
+
+                if (seedShape == Seed.Shape.Circle) {
+                    shape = new Circle();
+                    ((Circle) shape).setCenterX(event.getX());
+                    ((Circle) shape).setCenterY(event.getY());
+                }
+
+                else {
+                    shape = new Rectangle();
+                    ((Rectangle) shape).setX(event.getX());
+                    ((Rectangle) shape).setY(event.getY());
+                }
+
+                shape.setFill(Color.TRANSPARENT);
+                shape.setStroke(strokeColor);
+                shape.setStrokeWidth(3.0);
+
+                seed.getView().setMouseTransparent(true);
+                seed.getView().getChildren().add(shape);
 
                 tempPath = new Path();
 
                 tempPath.setMouseTransparent(true);
-                tempPath.setStrokeWidth(3.0);
+                tempPath.setStrokeWidth(0.0);
                 tempPath.setStroke(strokeColor);
-
-                seed.getChildren().add(tempPath);
 
                 tempPath.getElements().add(
                         new MoveTo(event.getX(), event.getY()));
@@ -206,11 +233,39 @@ public class ImageProcessingController implements Initializable {
         canvas.setOnMouseDragged(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent event) {
+
                 if (canvas.getBoundsInLocal().contains(
                         event.getX(), event.getY())) {
 
                     tempPath.getElements().add(
                             new LineTo(event.getX(), event.getY()));
+
+                    MoveTo p = (MoveTo) tempPath.getElements().get(0);
+
+                    Double xIn = p.getX();
+                    Double yIn = p.getY();
+
+                    if (seedShape == Seed.Shape.Circle) {
+
+                        Circle circle = (Circle) shape;
+                        circle.setCenterX(event.getX());
+                        circle.setCenterY(event.getY());
+
+                        Double deltaX = xIn - event.getX();
+                        Double deltaY = yIn - event.getY();
+                        Double diameter = Math.sqrt(deltaX*deltaX + deltaY*deltaY);
+
+                        circle.setRadius(diameter/2.0);
+                    }
+
+                    else if (seedShape == Seed.Shape.Square) {
+
+                        Rectangle rectangle = (Rectangle) shape;
+                        rectangle.setWidth(Math.abs(event.getX() - xIn));
+                        rectangle.setHeight(Math.abs(event.getY() - yIn));
+
+                    }
+
                 }
             }
         });
@@ -252,7 +307,7 @@ public class ImageProcessingController implements Initializable {
 
     public void inSeedClicked(ActionEvent actionEvent) {
 
-        seedBeingPicked = Seed.Internal;
+        seedBeingPicked = Seed.Type.Internal;
 
         disableSeedButtons();
         registerCanvasForMouseEvents();
@@ -261,7 +316,7 @@ public class ImageProcessingController implements Initializable {
 
     public void outSeedClicked(ActionEvent actionEvent) {
 
-        seedBeingPicked = Seed.External;
+        seedBeingPicked = Seed.Type.External;
         disableSeedButtons();
         registerCanvasForMouseEvents();
     }
@@ -325,6 +380,45 @@ public class ImageProcessingController implements Initializable {
 
     }
 
+//    private void registerRangeSliderListener() {
+//
+//        rangeSlider.setDisable(false);
+//
+//        rangeSlider.lowValueProperty().addListener(new ChangeListener<Number>() {
+//            @Override
+//            public void changed(ObservableValue<? extends Number> observable,
+//                                Number oldValue, Number newValue) {
+//
+//
+//            }
+//        });
+//
+//        rangeSlider.highValueProperty().addListener(new ChangeListener<Number>() {
+//            @Override
+//            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
+//
+//
+//            }
+//        });
+//
+//    }
+
+    private void redrawCanvas() {
+
+        zoomGroup.getChildren().removeAll(zoomGroup.getChildren());
+
+        Canvas canvas = new Canvas(currentImage.getWidth(), currentImage.getHeight());
+        canvas.getGraphicsContext2D().drawImage(currentImage, 0, 0);
+
+        zoomGroup.getChildren().add(canvas);
+
+        if (internalSeed != null)
+            zoomGroup.getChildren().add(internalSeed.getView());
+        if (externalSeed != null)
+            zoomGroup.getChildren().add(externalSeed.getView());
+
+    }
+
     private Image mat2Image(Mat frame) {
         MatOfByte buffer = new MatOfByte();
         Highgui.imencode(".png", frame, buffer);
@@ -335,6 +429,18 @@ public class ImageProcessingController implements Initializable {
     public void clearSeeds(ActionEvent actionEvent) {
 
         clearPoints();
+
+    }
+
+    public void selectSeedShape(ActionEvent actionEvent) {
+
+        Button button = (Button) actionEvent.getSource();
+
+        if (button.getId().equals("circle"))
+            seedShape = Seed.Shape.Circle;
+
+        else if (button.getId().equals("square"))
+            seedShape = Seed.Shape.Square;
 
     }
 }
