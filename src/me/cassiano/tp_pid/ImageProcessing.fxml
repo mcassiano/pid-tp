@@ -5,6 +5,7 @@
 <?import javafx.scene.Group?>
 <?import javafx.scene.layout.*?>
 <?import org.controlsfx.glyphfont.Glyph?>
+<?import org.controlsfx.control.RangeSlider?>
 <VBox prefHeight="660.0" prefWidth="800.0" xmlns="http://javafx.com/javafx/8" xmlns:fx="http://javafx.com/fxml/1" fx:controller="me.cassiano.tp_pid.ImageProcessingController">
   <children>
     <MenuBar VBox.vgrow="NEVER">
@@ -89,16 +90,16 @@
                    <Button fx:id="clearSeedsButton" disable="true" mnemonicParsing="false" onAction="#clearSeeds" prefWidth="183.0" text="Limpar sementes">
                    </Button>
 
-                   <!--<RangeSlider-->
-                       <!--showTickLabels="true"-->
-                       <!--showTickMarks="true"-->
-                       <!--min="0"-->
-                       <!--max="255"-->
-                       <!--lowValue="0"-->
-                       <!--highValue="255"-->
-                       <!--blockIncrement="1"-->
-                       <!--fx:id="rangeSlider"-->
-                       <!--disable="true"/>-->
+                   <RangeSlider
+                       showTickLabels="true"
+                       showTickMarks="true"
+                       min="0"
+                       max="255"
+                       lowValue="0"
+                       highValue="255"
+                       blockIncrement="1"
+                       fx:id="rangeSlider"
+                       disable="true"/>
 
                </children>
            </VBox>

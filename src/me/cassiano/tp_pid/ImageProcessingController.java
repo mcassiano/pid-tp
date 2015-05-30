@@ -24,11 +24,13 @@ import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.*;
 import javafx.stage.FileChooser;
+import org.controlsfx.control.RangeSlider;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfByte;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
+import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -54,12 +56,13 @@ public class ImageProcessingController implements Initializable {
     @FXML
     private Button clearSeedsButton;
 
-//    @FXML
-//    private RangeSlider rangeSlider;
+    @FXML
+    private RangeSlider rangeSlider;
 
     private Group zoomGroup;
 
     private Image currentImage;
+    private Image originalImage;
 
     private Canvas canvas;
 
@@ -96,10 +99,10 @@ public class ImageProcessingController implements Initializable {
 
         if (file != null) {
 
-            if (currentImage == null) {
+            if (originalImage == null) {
                 registerScrollListener();
                 registerSliderListener();
-                //registerRangeSliderListener();
+                registerRangeSliderListener();
             }
 
             if (DicomFileUtilities.isDicomOrAcrNemaFile(file)) {
@@ -108,7 +111,7 @@ public class ImageProcessingController implements Initializable {
                     SourceImage si = new SourceImage(file.getAbsolutePath());
                     BufferedImage bi = si.getBufferedImage();
 
-                    currentImage = SwingFXUtils.toFXImage(bi, null);
+                    originalImage = SwingFXUtils.toFXImage(bi, null);
 
                     // Ainda não consegui converter DICOM 16 bits
                     // para um objeto Mat do OpenCV, então não converto pra
@@ -126,7 +129,7 @@ public class ImageProcessingController implements Initializable {
 
                 Mat mat = Highgui.imread(file.getAbsolutePath());
                 Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY);
-                currentImage = mat2Image(mat);
+                originalImage = mat2Image(mat);
 
             }
 
@@ -135,8 +138,8 @@ public class ImageProcessingController implements Initializable {
 
             clearPoints();
 
-            canvas = new Canvas(currentImage.getWidth(), currentImage.getHeight());
-            canvas.getGraphicsContext2D().drawImage(currentImage, 0, 0);
+            canvas = new Canvas(originalImage.getWidth(), originalImage.getHeight());
+            canvas.getGraphicsContext2D().drawImage(originalImage, 0, 0);
 
             zoomGroup.getChildren().add(canvas);
 
@@ -380,28 +383,70 @@ public class ImageProcessingController implements Initializable {
 
     }
 
-//    private void registerRangeSliderListener() {
-//
-//        rangeSlider.setDisable(false);
-//
-//        rangeSlider.lowValueProperty().addListener(new ChangeListener<Number>() {
-//            @Override
-//            public void changed(ObservableValue<? extends Number> observable,
-//                                Number oldValue, Number newValue) {
-//
-//
-//            }
-//        });
-//
-//        rangeSlider.highValueProperty().addListener(new ChangeListener<Number>() {
-//            @Override
-//            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
-//
-//
-//            }
-//        });
-//
-//    }
+    private void registerRangeSliderListener() {
+
+        rangeSlider.setDisable(false);
+
+        rangeSlider.lowValueProperty().addListener(new ChangeListener<Number>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> observable,
+                                Number oldValue, Number newValue) {
+
+                if (currentImage == null) {
+                    BufferedImage newImg = SwingFXUtils.fromFXImage(originalImage, null);
+                    currentImage = SwingFXUtils.toFXImage(newImg, null);
+                }
+
+                BufferedImage bf = SwingFXUtils.fromFXImage(currentImage, null);
+
+                for (int i = 0; i < bf.getWidth(); i++) {
+                    for (int j = 0; j < bf.getHeight(); j++) {
+
+                        int pixel = bf.getRGB(i, j);
+                        int red = (pixel >> 16) & 0xff;
+
+                        int newPixelColor = (255 << 24);
+
+                        if (red < newValue.intValue())
+                            bf.setRGB(i, j, newPixelColor);
+                    }
+                }
+
+                currentImage = SwingFXUtils.toFXImage(bf, null);
+                redrawCanvas();
+            }
+        });
+
+        rangeSlider.highValueProperty().addListener(new ChangeListener<Number>() {
+            @Override
+            public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
+
+                if (currentImage == null) {
+                    BufferedImage newImg = SwingFXUtils.fromFXImage(originalImage, null);
+                    currentImage = SwingFXUtils.toFXImage(newImg, null);
+                }
+
+                BufferedImage bf = SwingFXUtils.fromFXImage(currentImage, null);
+
+                for (int i = 0; i < bf.getWidth(); i++) {
+                    for (int j = 0; j < bf.getHeight(); j++) {
+
+                        int pixel = bf.getRGB(i, j);
+                        int red = (pixel >> 16) & 0xff;
+
+                        int newPixelColor = (255 << 24) | (255 << 16) | (255 << 8) | 255;
+
+                        if (red > newValue.intValue())
+                            bf.setRGB(i, j, newPixelColor);
+                    }
+                }
+
+                currentImage = SwingFXUtils.toFXImage(bf, null);
+                redrawCanvas();
+            }
+        });
+
+    }
 
     private void redrawCanvas() {
 
