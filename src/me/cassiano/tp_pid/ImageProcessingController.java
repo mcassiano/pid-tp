@@ -1,8 +1,9 @@
 package me.cassiano.tp_pid;
 
-import com.pixelmed.dicom.DicomException;
-import com.pixelmed.dicom.DicomFileUtilities;
-import com.pixelmed.display.SourceImage;
+import ij.ImagePlus;
+import ij.io.Opener;
+import ij.process.ImageConverter;
+import ij.process.ImageProcessor;
 import javafx.beans.InvalidationListener;
 import javafx.beans.Observable;
 import javafx.beans.property.DoubleProperty;
@@ -16,6 +17,8 @@ import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.Group;
 import javafx.scene.canvas.Canvas;
+import javafx.scene.chart.BarChart;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.Slider;
 import javafx.scene.image.Image;
@@ -24,17 +27,8 @@ import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.*;
 import javafx.stage.FileChooser;
-import org.controlsfx.control.RangeSlider;
-import org.opencv.core.Mat;
-import org.opencv.core.MatOfByte;
-import org.opencv.highgui.Highgui;
-import org.opencv.imgproc.Imgproc;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
 
@@ -57,12 +51,17 @@ public class ImageProcessingController implements Initializable {
     private Button clearSeedsButton;
 
     @FXML
-    private RangeSlider rangeSlider;
+    private Slider minSlider;
+
+    @FXML
+    private Slider maxSlider;
+
+    @FXML
+    private BarChart<String, Number> histogramChart;
 
     private Group zoomGroup;
 
-    private Image currentImage;
-    private Image originalImage;
+    private ImagePlus originalImage;
 
     private Canvas canvas;
 
@@ -102,49 +101,48 @@ public class ImageProcessingController implements Initializable {
             if (originalImage == null) {
                 registerScrollListener();
                 registerSliderListener();
-                registerRangeSliderListener();
+                registerListenerForSliders();
             }
 
-            if (DicomFileUtilities.isDicomOrAcrNemaFile(file)) {
+            originalImage = new Opener().openImage(file.getPath());
+            ImageConverter converter = new ImageConverter(originalImage);
+            converter.convertToGray8();
 
-                try {
-                    SourceImage si = new SourceImage(file.getAbsolutePath());
-                    BufferedImage bi = si.getBufferedImage();
-
-                    originalImage = SwingFXUtils.toFXImage(bi, null);
-
-                    // Ainda não consegui converter DICOM 16 bits
-                    // para um objeto Mat do OpenCV, então não converto pra
-                    // escala de cinza.
-
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (DicomException e) {
-                    e.printStackTrace();
-                }
-
+            if (canvas == null) {
+                canvas = new Canvas(originalImage.getWidth(), originalImage.getHeight());
+                zoomGroup.getChildren().add(canvas);
             }
-
-            else {
-
-                Mat mat = Highgui.imread(file.getAbsolutePath());
-                Imgproc.cvtColor(mat, mat, Imgproc.COLOR_BGR2GRAY);
-                originalImage = mat2Image(mat);
-
-            }
-
-            if (canvas != null)
-                zoomGroup.getChildren().remove(canvas);
 
             clearPoints();
 
-            canvas = new Canvas(originalImage.getWidth(), originalImage.getHeight());
-            canvas.getGraphicsContext2D().drawImage(originalImage, 0, 0);
+            redrawCanvas();
 
-            zoomGroup.getChildren().add(canvas);
+            showHistogramChart();
 
             enableSeedButtons();
         }
+
+    }
+
+    private void showHistogramChart() {
+
+        ImageProcessor imageProcessor = originalImage.getChannelProcessor();
+
+        int[] histogram = imageProcessor.getHistogram();
+
+        XYChart.Series<String, Number> series1 = new XYChart.Series<String, Number>();
+
+
+        for (Integer i = 0; i < histogram.length; i++) {
+            XYChart.Data<String, Number> point =
+                    new XYChart.Data<String, Number>(i.toString(), histogram[i]);
+
+            series1.getData().add(point);
+        }
+
+        histogramChart.getData().clear();
+        histogramChart.getData().add(series1);
+
 
     }
 
@@ -383,66 +381,31 @@ public class ImageProcessingController implements Initializable {
 
     }
 
-    private void registerRangeSliderListener() {
+    private void registerListenerForSliders() {
 
-        rangeSlider.setDisable(false);
+        minSlider.setDisable(false);
+        maxSlider.setDisable(false);
 
-        rangeSlider.lowValueProperty().addListener(new ChangeListener<Number>() {
+        minSlider.valueProperty().addListener(new ChangeListener<Number>() {
             @Override
             public void changed(ObservableValue<? extends Number> observable,
                                 Number oldValue, Number newValue) {
 
-                if (currentImage == null) {
-                    BufferedImage newImg = SwingFXUtils.fromFXImage(originalImage, null);
-                    currentImage = SwingFXUtils.toFXImage(newImg, null);
-                }
-
-                BufferedImage bf = SwingFXUtils.fromFXImage(currentImage, null);
-
-                for (int i = 0; i < bf.getWidth(); i++) {
-                    for (int j = 0; j < bf.getHeight(); j++) {
-
-                        int pixel = bf.getRGB(i, j);
-                        int red = (pixel >> 16) & 0xff;
-
-                        int newPixelColor = (255 << 24);
-
-                        if (red < newValue.intValue())
-                            bf.setRGB(i, j, newPixelColor);
-                    }
-                }
-
-                currentImage = SwingFXUtils.toFXImage(bf, null);
+                ImageProcessor ip = originalImage.getChannelProcessor();
+                ip.setMinAndMax(newValue.doubleValue(), maxSlider.getValue());
                 redrawCanvas();
+
             }
         });
 
-        rangeSlider.highValueProperty().addListener(new ChangeListener<Number>() {
+        maxSlider.valueProperty().addListener(new ChangeListener<Number>() {
             @Override
             public void changed(ObservableValue<? extends Number> observable, Number oldValue, Number newValue) {
 
-                if (currentImage == null) {
-                    BufferedImage newImg = SwingFXUtils.fromFXImage(originalImage, null);
-                    currentImage = SwingFXUtils.toFXImage(newImg, null);
-                }
-
-                BufferedImage bf = SwingFXUtils.fromFXImage(currentImage, null);
-
-                for (int i = 0; i < bf.getWidth(); i++) {
-                    for (int j = 0; j < bf.getHeight(); j++) {
-
-                        int pixel = bf.getRGB(i, j);
-                        int red = (pixel >> 16) & 0xff;
-
-                        int newPixelColor = (255 << 24) | (255 << 16) | (255 << 8) | 255;
-
-                        if (red > newValue.intValue())
-                            bf.setRGB(i, j, newPixelColor);
-                    }
-                }
-
-                currentImage = SwingFXUtils.toFXImage(bf, null);
+                ImageProcessor ip = originalImage.getChannelProcessor();
+                ip.setMinAndMax(minSlider.getValue(), newValue.doubleValue());
                 redrawCanvas();
+
             }
         });
 
@@ -450,24 +413,17 @@ public class ImageProcessingController implements Initializable {
 
     private void redrawCanvas() {
 
-        zoomGroup.getChildren().removeAll(zoomGroup.getChildren());
+        Image currentImage = SwingFXUtils.
+                toFXImage(originalImage.getBufferedImage(), null);
 
-        Canvas canvas = new Canvas(currentImage.getWidth(), currentImage.getHeight());
+        canvas.setWidth(currentImage.getWidth());
+        canvas.setHeight(currentImage.getHeight());
+
+        canvas.getGraphicsContext2D().
+                clearRect(0, 0, currentImage.getWidth(), currentImage.getHeight());
+
         canvas.getGraphicsContext2D().drawImage(currentImage, 0, 0);
 
-        zoomGroup.getChildren().add(canvas);
-
-        if (internalSeed != null)
-            zoomGroup.getChildren().add(internalSeed.getView());
-        if (externalSeed != null)
-            zoomGroup.getChildren().add(externalSeed.getView());
-
-    }
-
-    private Image mat2Image(Mat frame) {
-        MatOfByte buffer = new MatOfByte();
-        Highgui.imencode(".png", frame, buffer);
-        return new Image(new ByteArrayInputStream(buffer.toArray()));
     }
 
 
