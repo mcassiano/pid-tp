@@ -3,6 +3,8 @@ package me.cassiano.tp_pid;
 import ij.ImageJ;
 import ij.ImagePlus;
 import ij.gui.OvalRoi;
+import ij.gui.Roi;
+import ij.gui.ShapeRoi;
 import ij.io.Opener;
 import ij.process.ImageConverter;
 import ij.process.ImageProcessor;
@@ -28,8 +30,12 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.*;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.shape.Shape;
 import javafx.stage.FileChooser;
 
+import java.awt.*;
+import java.awt.geom.Ellipse2D;
 import java.io.File;
 import java.net.URL;
 import java.util.ResourceBundle;
@@ -444,6 +450,7 @@ public class ImageProcessingController implements Initializable {
 
     public void clearSeeds(ActionEvent actionEvent) {
 
+        getSeedImage(internalSeed).show();
         clearPoints();
 
     }
@@ -503,11 +510,13 @@ public class ImageProcessingController implements Initializable {
 
             Circle circ = (Circle) seed.getView().getChildren().get(0);
 
-            int x = (int) circ.getCenterX();
-            int y = (int) circ.getCenterY();
-            int w = (int) circ.getRadius();
+            int x = (int) (circ.getCenterX() - circ.getRadius());
+            int y = (int) (circ.getCenterY() - circ.getRadius());
+            int w = (int) (2*circ.getRadius());
 
-            ip.setRoi(new OvalRoi(x, y, w, w));
+            Ellipse2D.Double shapeRoi = new Ellipse2D.Double(x, y, w, w);
+
+            ip.setRoi(new ShapeRoi(shapeRoi));
             ImageProcessor ip2 = ip.crop();
 
             return new ImagePlus("", ip2);
