@@ -386,6 +386,9 @@ public class ImageProcessingController implements Initializable {
         minSlider.setDisable(false);
         maxSlider.setDisable(false);
 
+        minSlider.setValue(0);
+        maxSlider.setValue(255);
+
         minSlider.valueProperty().addListener(new ChangeListener<Number>() {
             @Override
             public void changed(ObservableValue<? extends Number> observable,
