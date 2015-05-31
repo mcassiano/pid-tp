@@ -1,6 +1,8 @@
 package me.cassiano.tp_pid;
 
+import ij.ImageJ;
 import ij.ImagePlus;
+import ij.gui.OvalRoi;
 import ij.io.Opener;
 import ij.process.ImageConverter;
 import ij.process.ImageProcessor;
@@ -178,10 +180,12 @@ public class ImageProcessingController implements Initializable {
 
                     if (internalSeed == null) {
                         internalSeed = new Seed();
+                        internalSeed.setType(Seed.Type.Internal);
                         internalSeed.setView(new Group());
                         zoomGroup.getChildren().add(internalSeed.getView());
                     }
 
+                    internalSeed.setShape(seedShape);
                     seed = internalSeed;
                     strokeColor = Color.GREEN;
                 }
@@ -190,10 +194,12 @@ public class ImageProcessingController implements Initializable {
 
                     if (externalSeed == null) {
                         externalSeed = new Seed();
+                        externalSeed.setType(Seed.Type.Internal);
                         externalSeed.setView(new Group());
                         zoomGroup.getChildren().add(externalSeed.getView());
                     }
 
+                    externalSeed.setShape(seedShape);
                     seed = externalSeed;
                     strokeColor = Color.BLUE;
                 }
@@ -441,6 +447,77 @@ public class ImageProcessingController implements Initializable {
         clearPoints();
 
     }
+
+    private void extractFeatures() {
+
+        GLCMtexture internalSeedGLCM = new GLCMtexture();
+        internalSeedGLCM.calcGLCM(
+                getSeedImage(internalSeed).getChannelProcessor());
+
+        GLCMtexture externalSeedGLCM = new GLCMtexture();
+        externalSeedGLCM.calcGLCM(
+                getSeedImage(internalSeed).getChannelProcessor());
+
+
+        System.out.println("Semente interna");
+        System.out.println("Entropia : " + internalSeedGLCM.getEntropy());
+        System.out.println("Homogeniedade : " + internalSeedGLCM.getHomogeneity());
+        System.out.println("Energia: " + internalSeedGLCM.getEnergy());
+        System.out.println("Contraste: " + internalSeedGLCM.getContrast());
+        System.out.println("Correlação: " + internalSeedGLCM.getCorrelation());
+
+        System.out.println("");
+
+        System.out.println("Semente interna");
+        System.out.println("Entropia : " + externalSeedGLCM.getEntropy());
+        System.out.println("Homogeniedade : " + externalSeedGLCM.getHomogeneity());
+        System.out.println("Energia: " + externalSeedGLCM.getEnergy());
+        System.out.println("Contraste: " + externalSeedGLCM.getContrast());
+        System.out.println("Correlação: " + externalSeedGLCM.getCorrelation());
+    }
+
+
+    private ImagePlus getSeedImage(Seed seed) {
+
+
+        if (seed.getShape() == Seed.Shape.Square) {
+
+            ImageProcessor ip = originalImage.getChannelProcessor();
+
+            Rectangle rec = (Rectangle) seed.getView().getChildren().get(0);
+
+            int x = (int) rec.getX();
+            int y = (int) rec.getY();
+            int w = (int) rec.getWidth();
+            int h = (int) rec.getHeight();
+
+            ip.setRoi(x, y, w, h);
+            ImageProcessor ip2 = ip.crop();
+
+            return new ImagePlus("", ip2);
+        }
+
+        else if (seed.getShape() == Seed.Shape.Circle) {
+
+            ImageProcessor ip = originalImage.getChannelProcessor();
+
+            Circle circ = (Circle) seed.getView().getChildren().get(0);
+
+            int x = (int) circ.getCenterX();
+            int y = (int) circ.getCenterY();
+            int w = (int) circ.getRadius();
+
+            ip.setRoi(new OvalRoi(x, y, w, w));
+            ImageProcessor ip2 = ip.crop();
+
+            return new ImagePlus("", ip2);
+
+        }
+
+        return null;
+
+    }
+
 
     public void selectSeedShape(ActionEvent actionEvent) {
 
