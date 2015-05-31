@@ -100,8 +100,8 @@ public class ImageProcessingController implements Initializable {
 
             if (originalImage == null) {
                 registerScrollListener();
-                registerSliderListener();
-                registerListenerForSliders();
+                registerListenerForZoomSlider();
+                registerListenerForWindowingSliders();
             }
 
             originalImage = new Opener().openImage(file.getPath());
@@ -114,6 +114,8 @@ public class ImageProcessingController implements Initializable {
             }
 
             clearPoints();
+
+            resetWindowingSliders();
 
             redrawCanvas();
 
@@ -323,7 +325,7 @@ public class ImageProcessingController implements Initializable {
     }
 
 
-    private void registerSliderListener() {
+    private void registerListenerForZoomSlider() {
 
         zoomSlider.setDisable(false);
 
@@ -381,13 +383,10 @@ public class ImageProcessingController implements Initializable {
 
     }
 
-    private void registerListenerForSliders() {
+    private void registerListenerForWindowingSliders() {
 
         minSlider.setDisable(false);
         maxSlider.setDisable(false);
-
-        minSlider.setValue(0);
-        maxSlider.setValue(255);
 
         minSlider.valueProperty().addListener(new ChangeListener<Number>() {
             @Override
@@ -411,6 +410,13 @@ public class ImageProcessingController implements Initializable {
 
             }
         });
+
+    }
+
+    private void resetWindowingSliders() {
+
+        minSlider.adjustValue(0);
+        maxSlider.adjustValue(255);
 
     }
 
