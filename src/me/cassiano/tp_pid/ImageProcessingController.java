@@ -53,6 +53,9 @@ public class ImageProcessingController implements Initializable {
     private Button outSeed;
 
     @FXML
+    private Button runRegionGrowingButton;
+
+    @FXML
     private Group rootGroup;
 
     @FXML
@@ -317,6 +320,7 @@ public class ImageProcessingController implements Initializable {
         inSeed.setDisable(false);
         outSeed.setDisable(false);
         clearSeedsButton.setDisable(false);
+        runRegionGrowingButton.setDisable(false);
 
     }
 
@@ -481,6 +485,22 @@ public class ImageProcessingController implements Initializable {
         System.out.println("Energia: " + externalSeedGLCM.getEnergy());
         System.out.println("Contraste: " + externalSeedGLCM.getContrast());
         System.out.println("Correlação: " + externalSeedGLCM.getCorrelation());
+    }
+
+    public void runRegionGrowing(ActionEvent actionEvent) {
+
+        // run this on a new thread
+        // ImagePlus internal = getSeedImage(internal_seed);
+        // ImagePlus external = getSeedImage(external_seed);
+        // call_to_method(originalImage, internal, external);
+
+    }
+
+    private void onRegionGrowingComplete(ImagePlus imagePlus) {
+
+        // originalImage = imagePlus;
+        // redraw_canvas();
+
     }
 
 
